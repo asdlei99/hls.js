@@ -297,8 +297,11 @@ async function sauceConnect (tunnelIdentifier) {
   return new Promise(function (resolve, reject) {
     console.log(`Running sauce-connect-launcher. Tunnel id: ${tunnelIdentifier}`);
     sauceConnectLauncher({
-      tunnelIdentifier
-    }, function (err, sauceConnectProcess) {
+      tunnelIdentifier,
+      verbose: true,
+      verboseDebugging: true,
+      doctor: true
+    }, (err, sauceConnectProcess) => {
       if (err) {
         console.error(err.message);
         reject(err);

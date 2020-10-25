@@ -91,10 +91,11 @@ jobs:
       fail-fast: true
       max-parallel: 1 # TODO
       matrix:
-        ua: [chrome]
+        config: [chrome_win_10]
 
         include:
-        - ua: chrome
+        - config: chrome_win_10
+          ua: chrome
           os: Windows 10
         
     steps:

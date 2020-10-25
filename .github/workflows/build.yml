@@ -129,6 +129,8 @@ jobs:
       - name: run functional tests
         run: |
           npm ci
+          echo "action id"
+          echo $GITHUB_ACTION
           SAUCE_TUNNEL_ID="$GITHUB_ACTION" npm run test:func
         env:
           CI: true

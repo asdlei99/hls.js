@@ -9,7 +9,7 @@ require('chromedriver');
 const HttpServer = require('http-server');
 const streams = require('../../test-streams');
 const onTravis = !!process.env.TRAVIS;
-const useSauce = !!process.env.SAUCE || onTravis;
+const useSauce = !!process.env.SAUCE || onTravis || !!process.env.SAUCE_TUNNEL_ID; // TOOD
 const chai = require('chai');
 const expect = chai.expect;
 
@@ -349,7 +349,11 @@ describe(`testing hls.js playback in the browser on "${browserDescription}"`, fu
     }
 
     browser = new webdriver.Builder();
-    if (onTravis) {
+    if (process.env.SAUCE_TUNNEL_ID) {
+      capabilities['tunnel-identifier'] = process.env.SAUCE_TUNNEL_ID;
+      capabilities.build = 'HLSJS-' + process.env.SAUCE_TUNNEL_ID;
+    } else if (onTravis) {
+      // TODO remove
       capabilities['tunnel-identifier'] = process.env.TRAVIS_JOB_NUMBER;
       capabilities.build = 'HLSJS-' + process.env.TRAVIS_BUILD_NUMBER;
     } else if (useSauce) {

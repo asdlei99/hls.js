@@ -77,9 +77,45 @@ jobs:
         with:
           name: build
 
-      - name: unit tests
+      - name: run unit tests
         run: |
           npm ci
           npm run test:unit
+        env:
+          CI: true
+
+  test_functional:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2 # TODO needs full history for version
+      
+      # TODO dedupe
+      - name: cache node_modules
+        uses: actions/cache@v2
+        env:
+          cache-name: cache-node-modules
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
+        
+      - name: use Node.js
+        uses: actions/setup-node@v1
+        with:
+          node-version: '12'
+
+      - name: download build
+        uses: actions/download-artifact@v2
+        with:
+          name: build
+
+      - name: run functional tests
+        run: |
+          npm ci
+          SAUCE_TUNNEL_ID="$GITHUB_ACTION" npm run test:func
         env:
           CI: true

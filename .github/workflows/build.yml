@@ -129,8 +129,6 @@ jobs:
       - name: run functional tests
         run: |
           npm ci
-          echo "tunnel id"
-          echo $SAUCE_TUNNEL_ID
           npm run test:func
         env:
           CI: true

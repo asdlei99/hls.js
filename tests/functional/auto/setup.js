@@ -363,6 +363,7 @@ describe(`testing hls.js playback in the browser on "${browserDescription}"`, fu
       capabilities['tunnel-identifier'] = `local-${Date.now()}`;
     }
     if (useSauce) {
+      console.log('configuring server');
       if (!process.env.SAUCE_TUNNEL_ID) { // TODO
         sauceConnectProcess = await sauceConnect(capabilities['tunnel-identifier']);
       }

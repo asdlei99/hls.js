@@ -298,15 +298,14 @@ export default class M3U8Parser {
           break;
         case 'KEY': {
           // https://tools.ietf.org/html/rfc8216#section-4.3.2.4
-          const decryptparams = value1;
-          const keyAttrs = new AttrList(decryptparams);
-          const decryptmethod = keyAttrs.enumeratedString('METHOD');
+          const keyAttrs = new AttrList(value1);
+          const decryptmethod = keyAttrs.METHOD;
           const decrypturi = keyAttrs.URI;
-          const decryptiv = keyAttrs.hexadecimalInteger('IV');
-          const decryptkeyformatversions = keyAttrs.enumeratedString('KEYFORMATVERSIONS');
-          const decryptkeyid = keyAttrs.enumeratedString('KEYID');
+          const decryptiv = keyAttrs.IV;
+          const decryptkeyformatversions = keyAttrs.KEYFORMATVERSIONS;
+          const decryptkeyid = keyAttrs.KEYID;
           // From RFC: This attribute is OPTIONAL; its absence indicates an implicit value of "identity".
-          const decryptkeyformat = keyAttrs.enumeratedString('KEYFORMAT') ?? 'identity';
+          const decryptkeyformat = keyAttrs.KEYFORMAT ?? 'identity';
 
           const unsupportedKnownKeyformatsInManifest = [
             'com.apple.streamingkeydelivery',

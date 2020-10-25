@@ -1,0 +1,58 @@
+name: Build
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2 # TODO needs full history for version
+      
+      - name: Cache node_modules
+        uses: actions/cache@v2
+        env:
+          cache-name: cache-node-modules
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
+        
+      - name: Use Node.js
+        uses: actions/setup-node@v1
+        with:
+          node-version: '12'
+  
+      - name: install and build
+        run: |
+          npm ci
+          npm run lint
+          npm run type-check
+          npm run build
+          npm run docs
+          # check that hls.js doesn't error if requiring in node
+          # see https://github.com/video-dev/hls.js/pull/1642
+          node -e 'require("./" + require("./package.json").main)'
+        env:
+          CI: true
+
+      - name: Upload build
+        uses: actions/upload-artifact@v2
+        with:
+          name: build
+          path: '**'
+
+  testUnit:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download build
+        uses: actions/download-artifact@v2
+        with:
+          name: build
+      - name: unit tests
+        run: |
+          npm run test:unit

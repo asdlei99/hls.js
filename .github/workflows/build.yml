@@ -43,29 +43,18 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: build
-          path: '**'
+          path: |
+            **
+            !**/node_modules
 
   testUnit:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Cache node_modules
-        uses: actions/cache@v2
-        env:
-          cache-name: cache-node-modules
+      - name: Download build
+        uses: actions/download-artifact@v2
         with:
-          path: ~/.npm
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-build-${{ env.cache-name }}-
-            ${{ runner.os }}-build-
-            ${{ runner.os }}-
-        
-      - name: Use Node.js
-        uses: actions/setup-node@v1
-        with:
-          node-version: '12'
-          
+          name: build
       - name: unit tests
         run: |
           npm run test:unit

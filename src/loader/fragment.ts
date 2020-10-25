@@ -73,11 +73,13 @@ export class BaseSegment {
   }
 }
 
+type ElementaryStreams = Record<ElementaryStreamTypes, ElementaryStreamInfo | null>;
+
 export default class Fragment extends BaseSegment {
   private _decryptdata: LevelKey | null = null;
 
   // Holds the types of data this fragment supports
-  public elementaryStreams: Record<ElementaryStreamTypes, ElementaryStreamInfo | null> = {
+  public elementaryStreams: ElementaryStreams = {
     [ElementaryStreamTypes.AUDIO]: null,
     [ElementaryStreamTypes.VIDEO]: null,
     [ElementaryStreamTypes.AUDIOVIDEO]: null

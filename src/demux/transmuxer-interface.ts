@@ -102,6 +102,7 @@ export default class TransmuxerInterface {
   }
 
   push (data: ArrayBuffer, initSegmentData: Uint8Array, audioCodec: string | undefined, videoCodec: string | undefined, frag: Fragment, duration: number, accurateTimeOffset: boolean, chunkMeta: ChunkMetadata, defaultInitPTS?: number): void {
+    chunkMeta.transmuxing.start = performance.now();
     const { currentTransmuxSession, transmuxer, worker } = this;
     const timeOffset = frag.start;
     const decryptdata = frag.decryptdata;
@@ -149,9 +150,9 @@ export default class TransmuxerInterface {
   }
 
   flush (chunkMeta: ChunkMetadata) {
+    chunkMeta.transmuxing.start = performance.now();
     const { transmuxer, worker } = this;
     this.currentTransmuxSession = null;
-    chunkMeta.transmuxing.start = performance.now();
     if (worker) {
       worker.postMessage({
         cmd: 'flush',

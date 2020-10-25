@@ -255,7 +255,12 @@ export interface FragLoadedData {
   frag: Fragment
   part?: Part
   payload: ArrayBuffer
-  networkDetails: any
+  networkDetails: unknown
+}
+
+export interface FragLoadedEndData {
+  frag: Fragment
+  partsLoaded?: FragLoadedData[]
 }
 
 export interface FragDecryptedData {

@@ -17,7 +17,7 @@ import FragmentLoader, {
   LoadError
 } from '../loader/fragment-loader';
 import LevelDetails from '../loader/level-details';
-import { BufferAppendingData, ErrorData, FragLoadedData, KeyLoadedData } from '../types/events';
+import { BufferAppendingData, ErrorData, FragLoadedData, FragLoadedEndData, KeyLoadedData } from '../types/events';
 import { Level } from '../types/level';
 import { RemuxedTrack } from '../types/remuxer';
 import Hls from '../hls';
@@ -168,9 +168,12 @@ export default class BaseStreamController extends TaskLoop implements NetworkCom
   }
 
   onKeyLoaded (event: Events.KEY_LOADED, data: KeyLoadedData) {
-    if (this.state === State.KEY_LOADING) {
+    if (this.state === State.KEY_LOADING && this.levels) {
       this.state = State.IDLE;
-      this.loadFragment(data.frag, data.frag.start);
+      const levelDetails = this.levels[data.frag.level].details;
+      if (levelDetails) {
+        this.loadFragment(data.frag, levelDetails, data.frag.start);
+      }
     }
   }
 
@@ -185,11 +188,11 @@ export default class BaseStreamController extends TaskLoop implements NetworkCom
     super.onHandlerDestroyed();
   }
 
-  protected loadFragment (frag: Fragment, targetBufferTime: number) {
-    this._loadFragForPlayback(frag, targetBufferTime);
+  protected loadFragment (frag: Fragment, levelDetails: LevelDetails, targetBufferTime: number) {
+    this._loadFragForPlayback(frag, levelDetails, targetBufferTime);
   }
 
-  private _loadFragForPlayback (frag: Fragment, targetBufferTime: number) {
+  private _loadFragForPlayback (frag: Fragment, levelDetails: LevelDetails, targetBufferTime: number) {
     const progressCallback: FragmentLoadProgressCallback = (data: FragLoadedData) => {
       if (this._fragLoadAborted(frag)) {
         this.warn(`Fragment ${frag.sn} of level ${frag.level} was aborted during progressive download.`);
@@ -200,11 +203,14 @@ export default class BaseStreamController extends TaskLoop implements NetworkCom
       this._handleFragmentLoadProgress(data);
     };
 
-    this._doFragLoad(frag, targetBufferTime, progressCallback)
+    this._doFragLoad(frag, levelDetails, targetBufferTime, progressCallback)
       .then((data: FragLoadedData | null) => {
         this.fragLoadError = 0;
         const aborted = this._fragLoadAborted(frag);
         if (!data || aborted) {
+          if (this.state === State.FRAG_LOADING) {
+            this.state = State.IDLE;
+          }
           return;
         }
         this.log(`Loaded fragment ${frag.sn} of level ${frag.level}`);
@@ -283,26 +289,29 @@ export default class BaseStreamController extends TaskLoop implements NetworkCom
     return !frag || !fragCurrent || frag.level !== fragCurrent.level || frag.sn !== fragCurrent.sn;
   }
 
-  protected _handleFragmentLoadComplete (fragLoadedData: FragLoadedData) {
+  protected _handleFragmentLoadComplete (fragLoadedEndData: FragLoadedEndData) {
     const { transmuxer } = this;
     if (!transmuxer) {
       return;
     }
-    const { frag, part } = fragLoadedData;
-    const partIndex = part ? part.index : -1;
-    const chunkMeta = new ChunkMetadata(frag.level, frag.sn, frag.stats.chunkCount + 1, 0, partIndex);
-    chunkMeta.transmuxing.start = performance.now();
+    const { frag, partsLoaded } = fragLoadedEndData;
+    // If we did not load parts, or loaded all parts, we have complete (not partial) fragment data
+    const complete = !partsLoaded || (partsLoaded && (partsLoaded.length === 0 || partsLoaded.some(fragLoaded => !fragLoaded)));
+    const chunkMeta = new ChunkMetadata(frag.level, frag.sn, frag.stats.chunkCount + 1, 0, -1, !complete);
     transmuxer.flush(chunkMeta);
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   protected _handleFragmentLoadProgress (frag: FragLoadedData) {}
 
-  protected _doFragLoad (frag: Fragment, targetBufferTime: number | null = null, progressCallback?: FragmentLoadProgressCallback): Promise<FragLoadedData | null> {
+  protected _doFragLoad (frag: Fragment, details?: LevelDetails, targetBufferTime: number | null = null, progressCallback?: FragmentLoadProgressCallback): Promise<FragLoadedEndData | null> {
+    if (!this.levels) {
+      throw new Error('frag load aborted, missing levels');
+    }
     this.state = State.FRAG_LOADING;
     this.hls.trigger(Events.FRAG_LOADING, { frag, targetBufferTime });
 
-    return this.fragmentLoader.load(frag, targetBufferTime, progressCallback)
+    return this.fragmentLoader.load(frag, details, targetBufferTime, progressCallback)
       .catch((e: LoadError) => {
         const errorData: FragLoadFailResult = e.data;
 
@@ -328,7 +337,9 @@ export default class BaseStreamController extends TaskLoop implements NetworkCom
     const { frag, partIndex, level } = context;
     frag.stats.parsing.end = performance.now();
 
-    this.updateLevelTiming(frag, level);
+    if (!chunkMeta.partial) {
+      this.updateLevelTiming(frag, level);
+    }
     this.state = State.PARSED;
     this.hls.trigger(Events.FRAG_PARSED, { frag, partIndex });
   }
@@ -403,14 +414,14 @@ export default class BaseStreamController extends TaskLoop implements NetworkCom
       if (!levelDetails.PTSKnown && !startFragRequested) {
         frag = this.getInitialLiveFragment(levelDetails, fragments);
       }
-    } else if (pos < start) {
+    } else if (pos <= start) {
       // VoD playlist: if loadPosition before start of playlist, load first fragment
       frag = fragments[0];
     }
 
     // If we haven't run into any special cases already, just load the fragment most closely matching the requested position
     if (!frag) {
-      const end = levelDetails.fragmentEnd;
+      const end = config.lowLatencyMode ? levelDetails.partEnd : levelDetails.fragmentEnd;
       frag = this.getFragmentAtPosition(pos, end, levelDetails);
     }
 
@@ -460,8 +471,15 @@ export default class BaseStreamController extends TaskLoop implements NetworkCom
    */
   protected getFragmentAtPosition (bufferEnd: number, end: number, levelDetails: LevelDetails): Fragment | null {
     const { config, fragPrevious } = this;
-    const fragments = levelDetails.fragments;
+    let { fragments, endSN, fragmentHint } = levelDetails;
     const tolerance = config.maxFragLookUpTolerance;
+
+    const loadingParts = !!(config.lowLatencyMode && levelDetails.partList && fragmentHint);
+    if (loadingParts && fragmentHint) {
+      // Include incomplete fragment with parts at end
+      fragments = fragments.concat(fragmentHint);
+      endSN = fragmentHint.sn as number;
+    }
 
     let frag;
     if (bufferEnd < end) {
@@ -481,9 +499,9 @@ export default class BaseStreamController extends TaskLoop implements NetworkCom
       const nextFrag = fragments[curSNIdx + 1];
       // Force the next fragment to load if the previous one was already selected. This can occasionally happen with
       // non-uniform fragment durations
-      if (fragPrevious && frag.sn === fragPrevious.sn) {
+      if (fragPrevious && frag.sn === fragPrevious.sn && !loadingParts) {
         if (sameLevel && !frag.backtracked) {
-          if (frag.sn < levelDetails.endSN) {
+          if (frag.sn < endSN) {
             frag = nextFrag;
             if (this.fragmentTracker.getState(frag) !== FragmentState.OK) {
               this.log(`SN just loaded, load next one: ${frag.sn}`);
@@ -605,14 +623,10 @@ export default class BaseStreamController extends TaskLoop implements NetworkCom
   }
 
   private handleFragLoadAborted (frag: Fragment, part: Part | undefined) {
-    const { transmuxer } = this;
-    if (transmuxer && frag.sn !== 'initSegment') {
-      transmuxer.flush(new ChunkMetadata(frag.level, frag.sn, frag.stats.chunkCount + 1, 0, part ? part.index : -1));
+    if (this.transmuxer && frag.sn !== 'initSegment') {
+      this.log(`Fragment ${frag.sn} of level ${frag.level} was aborted, flushing transmuxer`);
+      this.transmuxer.flush(new ChunkMetadata(frag.level, frag.sn, frag.stats.chunkCount + 1, 0, part ? part.index : -1, true));
     }
-    Object.keys(frag.elementaryStreams).forEach(type => {
-      frag.elementaryStreams[type] = null;
-    });
-    this.log(`Fragment ${frag.sn} of level ${frag.level} was aborted, flushing transmuxer & resetting nextLoadPosition to ${this.nextLoadPosition}`);
   }
 
   private updateLevelTiming (frag: Fragment, level: Level) {

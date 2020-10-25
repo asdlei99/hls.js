@@ -4,10 +4,13 @@
  * */
 
 import { logger } from '../utils/logger';
-import Fragment from '../loader/fragment';
+import Fragment, { Part } from '../loader/fragment';
 import LevelDetails from '../loader/level-details';
 import { Level } from '../types/level';
 import { LoaderStats } from '../types/loader';
+
+type FragmentIntersection = (oldFrag: Fragment, newFrag: Fragment) => void;
+type PartIntersection = (oldPart: Part, newPart: Part) => void;
 
 export function addGroupId (level: Level, type: string, id: string): void {
   switch (type) {
@@ -83,9 +86,10 @@ export function updateFragPTSDTS (details: LevelDetails | undefined, frag: Fragm
 
     maxStartPTS = Math.max(startPTS, fragStartPts);
     startPTS = Math.min(startPTS, fragStartPts);
+    startDTS = Math.min(startDTS, frag.startDTS);
+
     minEndPTS = Math.min(endPTS, fragEndPts);
     endPTS = Math.max(endPTS, fragEndPts);
-    startDTS = Math.min(startDTS, frag.startDTS);
     endDTS = Math.max(endDTS, frag.endDTS);
   }
 
@@ -143,19 +147,19 @@ export function mergeDetails (oldDetails: LevelDetails, newDetails: LevelDetails
   // loop through overlapping SN and update startPTS , cc, and duration if any found
   let ccOffset = 0;
   let PTSFrag;
-  mapFragmentIntersection(oldDetails, newDetails, (oldFrag, newFrag) => {
+  mapFragmentIntersection(oldDetails, newDetails, (oldFrag: Fragment, newFrag: Fragment) => {
     ccOffset = oldFrag.cc - newFrag.cc;
     if (Number.isFinite(oldFrag.startPTS) && Number.isFinite(oldFrag.endPTS)) {
-      newFrag.start = newFrag.startPTS = oldFrag.startPTS;
+      newFrag.start = newFrag.startPTS = oldFrag.startPTS as number;
       newFrag.startDTS = oldFrag.startDTS;
       newFrag.appendedPTS = oldFrag.appendedPTS;
       newFrag.maxStartPTS = oldFrag.maxStartPTS;
-      if (!oldFrag.hasParts) {
-        newFrag.endPTS = oldFrag.endPTS;
-        newFrag.endDTS = oldFrag.endDTS;
-        newFrag.minEndPTS = oldFrag.minEndPTS;
-        newFrag.duration = oldFrag.endPTS - oldFrag.startPTS;
-      }
+
+      newFrag.endPTS = oldFrag.endPTS;
+      newFrag.endDTS = oldFrag.endDTS;
+      newFrag.minEndPTS = oldFrag.minEndPTS;
+      newFrag.duration = (oldFrag.endPTS as number) - (oldFrag.startPTS as number);
+
       newFrag.backtracked = oldFrag.backtracked;
       newFrag.dropped = oldFrag.dropped;
       PTSFrag = newFrag;
@@ -171,7 +175,7 @@ export function mergeDetails (oldDetails: LevelDetails, newDetails: LevelDetails
   if (newDetails.skippedSegments) {
     newDetails.deltaUpdateFailed = newDetails.fragments.some(frag => !frag);
     if (newDetails.deltaUpdateFailed) {
-      logger.warn(`[${this.constructor.name}] Previous playlist missing segments skipped in delta playlist`);
+      logger.warn('[level-helper] Previous playlist missing segments skipped in delta playlist');
       for (let i = newDetails.skippedSegments; i--;) {
         newDetails.fragments.shift();
       }
@@ -194,6 +198,11 @@ export function mergeDetails (oldDetails: LevelDetails, newDetails: LevelDetails
     newDetails.startCC = newDetails.fragments[0].cc;
   }
 
+  // Merge parts
+  mapPartIntersection(oldDetails.partList, newDetails.partList, (oldPart: Part, newPart: Part) => {
+    newPart.stats = oldPart.stats;
+  });
+
   // if at least one fragment contains PTS info, recompute PTS information for all fragments
   if (PTSFrag) {
     updateFragPTSDTS(newDetails, PTSFrag, PTSFrag.startPTS, PTSFrag.endPTS, PTSFrag.startDTS, PTSFrag.endDTS);
@@ -209,7 +218,22 @@ export function mergeDetails (oldDetails: LevelDetails, newDetails: LevelDetails
   }
 }
 
-export function mapFragmentIntersection (oldDetails: LevelDetails, newDetails: LevelDetails, intersectionFn): void {
+export function mapPartIntersection (oldParts: Part[] | null, newParts: Part[] | null, intersectionFn: PartIntersection) {
+  if (oldParts && newParts) {
+    let delta = 0;
+    for (let i = 0, len = oldParts.length; i <= len; i++) {
+      const oldPart = oldParts[i];
+      const newPart = newParts[i + delta];
+      if (oldPart && newPart && oldPart.index === newPart.index && oldPart.fragment.sn === newPart.fragment.sn) {
+        intersectionFn(oldPart, newPart);
+      } else {
+        delta--;
+      }
+    }
+  }
+}
+
+export function mapFragmentIntersection (oldDetails: LevelDetails, newDetails: LevelDetails, intersectionFn: FragmentIntersection): void {
   const skippedSegments = newDetails.skippedSegments;
   const start = Math.max(oldDetails.startSN, newDetails.startSN) - newDetails.startSN;
   const end = (skippedSegments ? newDetails.endSN : Math.min(oldDetails.endSN, newDetails.endSN)) - newDetails.startSN;
@@ -223,7 +247,7 @@ export function mapFragmentIntersection (oldDetails: LevelDetails, newDetails: L
       newFrag = newDetails.fragments[i] = oldFrag;
     }
     if (oldFrag && newFrag) {
-      intersectionFn(oldFrag, newFrag, i);
+      intersectionFn(oldFrag, newFrag);
     }
   }
 }
@@ -251,7 +275,7 @@ export function computeReloadInterval (newDetails: LevelDetails, stats: LoaderSt
   const reloadIntervalAfterMiss = reloadInterval / 2;
   const timeSinceLastModified = newDetails.lastModified ? +new Date() - newDetails.lastModified : 0;
   const useLastModified = timeSinceLastModified > 0 && timeSinceLastModified < reloadInterval * 3;
-  const roundTrip = stats ? stats.loading.end - stats.loading.start : 0;
+  const roundTrip = stats.loading.end - stats.loading.start;
 
   let estimatedTimeUntilUpdate = reloadInterval;
   let availabilityDelay = newDetails.availabilityDelay;
@@ -298,5 +322,13 @@ export function getFragmentWithSN (level: Level, sn: number): Fragment | null {
     return null;
   }
   const levelDetails = level.details;
-  return levelDetails.fragments[sn - levelDetails.startSN];
+  let fragment: Fragment | undefined = levelDetails.fragments[sn - levelDetails.startSN];
+  if (fragment) {
+    return fragment;
+  }
+  fragment = levelDetails.fragmentHint;
+  if (fragment && fragment.sn === sn) {
+    return fragment;
+  }
+  return null;
 }

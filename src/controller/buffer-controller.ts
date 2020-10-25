@@ -134,7 +134,7 @@ export default class BufferController implements ComponentAPI {
   }
 
   protected onMediaDetaching () {
-    logger.log('media source detaching');
+    logger.log('[buffer-controller]: media source detaching');
     const { media, mediaSource, _objectUrl } = this;
     if (mediaSource) {
       if (mediaSource.readyState === 'open') {
@@ -145,7 +145,7 @@ export default class BufferController implements ComponentAPI {
           // let's just avoid this exception to propagate
           mediaSource.endOfStream();
         } catch (err) {
-          logger.warn(`onMediaDetaching:${err.message} while calling endOfStream`);
+          logger.warn(`[buffer-controller]: onMediaDetaching: ${err.message} while calling endOfStream`);
         }
       }
       // Clean up the SourceBuffers by invoking onBufferReset
@@ -167,7 +167,7 @@ export default class BufferController implements ComponentAPI {
           media.removeAttribute('src');
           media.load();
         } else {
-          logger.warn('media.src was changed by a third party - skip cleanup');
+          logger.warn('[buffer-controller]: media.src was changed by a third party - skip cleanup');
         }
       }
 
@@ -197,7 +197,7 @@ export default class BufferController implements ComponentAPI {
           sourceBuffer[type] = undefined;
         }
       } catch (err) {
-        logger.warn(`Failed to reset the ${type} buffer`, err);
+        logger.warn(`[buffer-controller]: Failed to reset the ${type} buffer`, err);
       }
     });
     this._initSourceBuffer();
@@ -361,12 +361,9 @@ export default class BufferController implements ComponentAPI {
       if (!mediaSource || mediaSource.readyState !== 'open') {
         return;
       }
-
-      logger.log('[buffer-controller]: Signaling end of stream');
       // Allow this to throw and be caught by the enqueueing function
       mediaSource.endOfStream();
     };
-    logger.log('[buffer-controller: End of stream signalled, enqueuing end of stream operation');
     this.blockBuffers(endStream);
   }
 
@@ -378,7 +375,6 @@ export default class BufferController implements ComponentAPI {
     this._live = details.live;
 
     const levelEnd = details.fragments[0].start + details.totalduration;
-    logger.log('[buffer-controller]: Duration update required; enqueueing duration change operation');
     if (this.getSourceBufferTypes().length) {
       this.blockBuffers(this.updateMediaElementDuration.bind(this, levelEnd));
     } else {
@@ -423,8 +419,8 @@ export default class BufferController implements ComponentAPI {
           audioBuffer.timestampOffset = data.start;
         }
       },
-      onError (e) {
-        logger.warn('[buffer-controller]: Failed to abort the audio SourceBuffer', e);
+      onError (error) {
+        logger.warn('[buffer-controller]: Failed to abort the audio SourceBuffer', error);
       }
     };
     operationQueue.insertAbort(operation, type);
@@ -538,7 +534,7 @@ export default class BufferController implements ComponentAPI {
         // use levelCodec as first priority
         const codec = track.levelCodec || track.codec;
         const mimeType = `${track.container};codecs=${codec}`;
-        logger.log(`creating sourceBuffer(${mimeType})`);
+        logger.log(`[buffer-controller]: creating sourceBuffer(${mimeType})`);
         try {
           const sb = sourceBuffer[trackName] = mediaSource.addSourceBuffer(mimeType);
           const sbName = trackName as SourceBufferName;
@@ -553,7 +549,7 @@ export default class BufferController implements ComponentAPI {
             id: track.id
           };
         } catch (err) {
-          logger.error(`error while trying to add sourceBuffer:${err.message}`);
+          logger.error(`[buffer-controller]: error while trying to add sourceBuffer: ${err.message}`);
           this.hls.trigger(Events.ERROR, {
             type: ErrorTypes.MEDIA_ERROR,
             details: ErrorDetails.BUFFER_ADD_CODEC_ERROR,
@@ -570,11 +566,9 @@ export default class BufferController implements ComponentAPI {
   // Keep as arrow functions so that we can directly reference these functions directly as event listeners
   private _onMediaSourceOpen = () => {
     const { hls, media, mediaSource } = this;
-    logger.log('media source opened');
+    logger.log('[buffer-controller]: Media source opened');
     if (media) {
       hls.trigger(Events.MEDIA_ATTACHED, { media });
-    } else {
-      logger.log('[buffer-controller]: Media source opened, and no media was attached');
     }
 
     if (mediaSource) {

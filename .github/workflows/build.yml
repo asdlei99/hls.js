@@ -85,8 +85,17 @@ jobs:
           CI: true
 
   test_functional:
-    needs: build
+    needs: build # TODO change to test_unit so don't waste resources if unit test fail
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      max-parallel: 1 # TODO
+      matrix:
+        UA: [chrome]
+        include:
+        - UA: chrome
+          OS: Windows 10
+        
     steps:
       - uses: actions/checkout@v2 # TODO needs full history for version
       
@@ -113,6 +122,8 @@ jobs:
         with:
           name: build
 
+      # requires SAUCE_USERNAME and SAUCE_ACCESS_KEY
+      # TODO don't run on forks
       - name: run functional tests
         run: |
           npm ci

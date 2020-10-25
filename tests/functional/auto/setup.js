@@ -371,7 +371,8 @@ describe(`testing hls.js playback in the browser on "${browserDescription}"`, fu
       capabilities.avoidProxy = true;
       capabilities['record-screenshots'] = 'false';
       // browser = browser.usingServer(`https://${process.env.SAUCE_USERNAME}:${process.env.SAUCE_ACCESS_KEY}@ondemand.us-west-1.saucelabs.com:443/wd/hub`);
-      browser = browser.usingServer(`https://${process.env.SAUCE_USERNAME}:${process.env.SAUCE_ACCESS_KEY}@ondemand.eu-central-1.saucelabs.com/wd/hub`);
+      // browser = browser.usingServer(`https://${process.env.SAUCE_USERNAME}:${process.env.SAUCE_ACCESS_KEY}@ondemand.eu-central-1.saucelabs.com/wd/hub`);
+      browser = browser.usingServer('https://ondemand.eu-central-1.saucelabs.com/wd/hub');
     }
 
     browser = browser.withCapabilities(capabilities).build();

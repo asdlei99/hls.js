@@ -124,7 +124,7 @@ jobs:
         with:
           name: build
 
-      - name: start SauceConnect tunnnel
+      - name: start SauceConnect tunnel
         uses: saucelabs/sauce-connect-action@a0930f1
         with:
           username: ${{ secrets.SAUCE_USERNAME }}

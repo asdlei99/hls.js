@@ -363,7 +363,9 @@ describe(`testing hls.js playback in the browser on "${browserDescription}"`, fu
       capabilities['tunnel-identifier'] = `local-${Date.now()}`;
     }
     if (useSauce) {
-      sauceConnectProcess = await sauceConnect(capabilities['tunnel-identifier']);
+      if (!process.env.SAUCE_TUNNEL_ID) { // TODO
+        sauceConnectProcess = await sauceConnect(capabilities['tunnel-identifier']);
+      }
       capabilities.username = process.env.SAUCE_USERNAME;
       capabilities.accessKey = process.env.SAUCE_ACCESS_KEY;
       capabilities.avoidProxy = true;

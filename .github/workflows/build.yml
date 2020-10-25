@@ -26,7 +26,7 @@ jobs:
         with:
           node-version: '12'
   
-      - name: install and build
+      - name: Install and build
         run: |
           npm ci
           npm run lint
@@ -49,10 +49,23 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Download build
-        uses: actions/download-artifact@v2
+      - name: Cache node_modules
+        uses: actions/cache@v2
+        env:
+          cache-name: cache-node-modules
         with:
-          name: build
+          path: ~/.npm
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
+        
+      - name: Use Node.js
+        uses: actions/setup-node@v1
+        with:
+          node-version: '12'
+          
       - name: unit tests
         run: |
           npm run test:unit

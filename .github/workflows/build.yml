@@ -45,7 +45,7 @@ jobs:
           name: build
           path: |
             **
-            !**/.
+            !**/[.]*/**
             !**/node_modules/
 
   test_unit:

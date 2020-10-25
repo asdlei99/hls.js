@@ -84,17 +84,18 @@ jobs:
         env:
           CI: true
 
-  test_functional:
+  test_functional_required:
     needs: build # TODO change to test_unit so don't waste resources if unit test fail
     runs-on: ubuntu-latest
     strategy:
       fail-fast: true
       max-parallel: 1 # TODO
       matrix:
-        UA: [chrome]
+        ua: [chrome]
+
         include:
-        - UA: chrome
-          OS: Windows 10
+        - ua: chrome
+          os: Windows 10
         
     steps:
       - uses: actions/checkout@v2 # TODO needs full history for version
@@ -130,3 +131,5 @@ jobs:
           SAUCE_TUNNEL_ID="$GITHUB_ACTION" npm run test:func
         env:
           CI: true
+          UA: ${{ matrix.ua }}
+          OS: ${{ matrix.os }}

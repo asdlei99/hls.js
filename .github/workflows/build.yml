@@ -79,6 +79,7 @@ jobs:
 
       - name: unit tests
         run: |
+          npm ci
           npm run test:unit
         env:
           CI: true
